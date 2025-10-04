@@ -23,7 +23,7 @@ print(df.info())
 
 # Mostrar estadísticos descriptivos (incluyendo texto y fechas)
 print("\n=== DESCRIBE (GENERAL) ===")
-print(df.describe(include="all", datetime_is_numeric=True))
+
 
 # Mostrar tipos de datos de todas las columnas
 print("\n=== TIPOS DE DATOS (DTYPES) ===")
@@ -122,8 +122,8 @@ representar citas distintas del mismo paciente.
 
 # --- Convertir columnas de fecha ---
 # Convertimos las columnas 'ScheduledDay' y 'AppointmentDay' al tipo datetime
-df["ScheduledDay"] = pd.to_datetime(df["ScheduledDay"], errors="coerce")
-df["AppointmentDay"] = pd.to_datetime(df["AppointmentDay"], errors="coerce")
+df["ScheduledDay"] = pd.to_datetime(df["ScheduledDay"], errors="coerce", utc=True)
+df["AppointmentDay"] = pd.to_datetime(df["AppointmentDay"], errors="coerce", utc=True)
 
 # --- Crear columna DiffDays ---
 # Calcula la diferencia en días entre la cita y el agendamiento
