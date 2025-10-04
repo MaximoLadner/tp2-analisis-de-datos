@@ -23,7 +23,7 @@ print(df.info())
 
 # Mostrar estadísticos descriptivos (incluyendo texto y fechas)
 print("\n=== DESCRIBE (GENERAL) ===")
-print(df.describe(include="all", datetime_is_numeric=True))
+print(df.describe(include="all"))
 
 # Mostrar tipos de datos de todas las columnas
 print("\n=== TIPOS DE DATOS (DTYPES) ===")
@@ -122,8 +122,8 @@ representar citas distintas del mismo paciente.
 
 # --- Convertir columnas de fecha ---
 # Convertimos las columnas 'ScheduledDay' y 'AppointmentDay' al tipo datetime
-df["ScheduledDay"] = pd.to_datetime(df["ScheduledDay"], errors="coerce")
-df["AppointmentDay"] = pd.to_datetime(df["AppointmentDay"], errors="coerce")
+df["ScheduledDay"] = pd.to_datetime(df["ScheduledDay"], errors="coerce", utc=True)
+df["AppointmentDay"] = pd.to_datetime(df["AppointmentDay"], errors="coerce", utc=True)
 
 # --- Crear columna DiffDays ---
 # Calcula la diferencia en días entre la cita y el agendamiento
@@ -183,10 +183,47 @@ if "Gender" in df.columns:
 # --- Crear variable booleana DidAttend ---
 # Según la consigna, 1 = asistió, 0 = no asistió
 if "No-show" in df.columns:
-    df["DidAttend"] = df["No-show"].apply(lambda x: 0 if str(x).strip().upper() == "YES" else 1)
+    # --- Limpiar y estandarizar la columna No-show ---
+    df["No-show_limpio"] = df["No-show"].astype(str).str.strip().str.upper()
+
+    # --- Definir el mapeo para corregir inconsistencias ---
+    
+    # Mapeo a 'YES' (No Asistió / No Show)
+    no_asistio_map = {'YES', 'Y', '1', 'TRUE', 'SI'} 
+    
+    # Mapeo a 'NO' (Sí Asistió / Show)
+    si_asistio_map = {'NO', 'N', '0', 'FALSE'}
+    
+    # Función de corrección para asignar solo 'YES', 'NO', o pd.NA
+    def corregir_no_show(valor):
+        if pd.isna(valor) or valor in {'NAN', ''}: 
+            return pd.NA
+        elif valor in no_asistio_map:
+            return 'YES' # Se unifica a 'YES' (No Asistió)
+        elif valor in si_asistio_map:
+            return 'NO'  # Se unifica a 'NO' (Sí Asistió)
+        else: # Si es cualquier otra categoría inválida no mapeada
+            return pd.NA
+
+    df["No-show_limpio"] = df["No-show_limpio"].apply(corregir_no_show)
+
+    # --- Crear variable booleana DidAttend: 1 = asistió ('NO'), 0 = no asistió ('YES') ---
+    mapping_didattend = {'NO': 1, 'YES': 0} 
+    df["DidAttend"] = df["No-show_limpio"].map(mapping_didattend).fillna(pd.NA)
+    
+    # --- Usar el tipo Int64 para permitir valores enteros con nulos ---
+    df["DidAttend"] = df["DidAttend"].astype('Int64')
+
+print("\n=== COLUMNA DidAttend (LUEGO DE LIMPIEZA) ===")
+print(df["DidAttend"].value_counts(dropna=False))
+
+print(f"\nValores únicos en No-show_limpio (CORREGIDOS): {df['No-show_limpio'].unique()}")
+
 
 print("\n=== COLUMNA DidAttend ===")
 print(df["DidAttend"].value_counts())
+
+
 
 # --- Mostrar valores únicos actualizados ---
 if "Gender" in df.columns:
@@ -203,3 +240,173 @@ DECISIÓN:
 ✔ Se normalizaron valores inconsistentes (por ej. 'Fem' → 'F').
 ✔ Se creó la variable DidAttend, que representa si el paciente asistió (1) o no (0).
 """)
+
+# ======================
+# VERIFICACIÓN DE DOMINIOS
+# ======================
+
+
+# --- Detección de edades fuera del rango [0, 120] ---
+EDAD_MIN = 0
+EDAD_MAX = 120
+edades_invalidas = df[(df["Age_num"] < EDAD_MIN) | (df["Age_num"] > EDAD_MAX)]
+
+
+# --- Listas de edades inválidas ---
+print(f"Registros con edad < {EDAD_MIN}: {len(df[df['Age_num'] < EDAD_MIN])}")
+print(f"Registros con edad > {EDAD_MAX}: {len(df[df['Age_num'] > EDAD_MAX])}")
+
+
+# --- Valores únicos que son inválidos ---
+print("\nValores únicos fuera de rango (muestras):")
+print(edades_invalidas["Age_num"].value_counts())
+
+
+# --- Corregir la columna Age_num: Convertir los valores fuera de rango a nulo ---
+df["Age_num"] = np.where(
+    (df["Age_num"] < EDAD_MIN) | (df["Age_num"] > EDAD_MAX), 
+    pd.NA, 
+    df["Age_num"]
+)
+
+print(f"\nNuevos nulos en Age_num después de corregir rangos: {df['Age_num'].isna().sum()}")
+
+
+# --- Columna Gender ---
+print("\n=== VALIDACIÓN DE GÉNERO ===")
+valores_gender = df["Gender"].unique()
+print(f"Valores únicos en Gender: {valores_gender}")
+
+
+# --- Detectar y contar valores inesperados que no sean F, M, Otro o nulos ---
+categorias_validas_gender = {'F', 'M', 'Otro', pd.NA}
+invalidos_gender = df["Gender"][~df["Gender"].isin(categorias_validas_gender) & df["Gender"].notna()].unique()
+
+print(f"Categorías inválidas encontradas: {invalidos_gender}")
+
+
+# --- Columna No-show ---
+print("\n=== VALIDACIÓN DE NO-SHOW ===")
+
+# --- Limpiar y estandarizar la columna No-show ---
+df["No-show_limpio"] = df["No-show"].astype(str).str.strip().str.upper()
+
+# --- Mostrar valores únicos esperados ---
+valores_noshow = df["No-show_limpio"].unique()
+print(f"Valores únicos en No-show (limpio): {valores_noshow}")
+
+print(f"\nValores únicos en No-show_limpio (CORREGIDOS): {df['No-show_limpio'].unique()}")
+
+print("""
+DECISIÓN:
+✔ Se detectaron edades fuera del rango establecido.
+✔ Se convirtieron al tipo null para tratarlas posteriormente.
+✔ Los valores de Género ya fueron corregidos y unificados en 'F', 'M', y 'Otro'.
+✔ Ya se han tratado los valores válidos en la limpieza de DidAttend.
+""")
+
+
+
+# ======================
+# OUTLIERS
+# ======================
+
+def detectar_outliers_iqr(df, columna):
+    """Detecta y cuenta outliers en una columna usando la regla 1.5 * IQR."""
+    # Quitar nulos para el cálculo
+    serie_sin_na = df[columna].dropna()
+    
+    Q1 = serie_sin_na.quantile(0.25)
+    Q3 = serie_sin_na.quantile(0.75)
+    IQR = Q3 - Q1
+    
+    limite_inferior = Q1 - 1.5 * IQR
+    limite_superior = Q3 + 1.5 * IQR
+    
+    outliers = serie_sin_na[(serie_sin_na < limite_inferior) | (serie_sin_na > limite_superior)]
+    
+    print(f"\n--- Análisis de Outliers en {columna} ---")
+    print(f"Q1: {Q1:.2f}, Q3: {Q3:.2f}, IQR: {IQR:.2f}")
+    print(f"Límite Inferior (1.5*IQR): {limite_inferior:.2f}")
+    print(f"Límite Superior (1.5*IQR): {limite_superior:.2f}")
+    print(f"Cantidad de outliers detectados: {len(outliers)}")
+    print(f"Porcentaje del dataset: {len(outliers)/len(df) * 100:.2f}%")
+    
+    return outliers, limite_inferior, limite_superior
+
+
+# --- Detección en Age_num ---
+outliers_age, lower_age, upper_age = detectar_outliers_iqr(df, "Age_num")
+
+
+# --- Detección en DiffDays ---
+### Los valores negativos ya son anómalos. El IQR los detecta como outliers.
+outliers_diffdays, lower_diff, upper_diff = detectar_outliers_iqr(df, "DiffDays")
+
+
+# --- Librerías para armar los Boxplots ---
+import matplotlib.pyplot as plt
+import seaborn as sns
+plt.style.use('ggplot')
+
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# --- Boxplot para Age_num ---
+sns.boxplot(x=df["Age_num"], ax=axes[0])
+axes[0].set_title("Boxplot de Age_num (Edad)")
+axes[0].axvline(lower_age, color='r', linestyle='--', linewidth=0.8)
+axes[0].axvline(upper_age, color='r', linestyle='--', linewidth=0.8)
+
+# --- Boxplot para DiffDays ---
+sns.boxplot(x=df["DiffDays"], ax=axes[1])
+axes[1].set_title("Boxplot de DiffDays (Días de espera)")
+axes[1].axvline(lower_diff, color='r', linestyle='--', linewidth=0.8)
+axes[1].axvline(upper_diff, color='r', linestyle='--', linewidth=0.8)
+
+plt.tight_layout()
+plt.show()
+
+print("""
+DECISIÓN:
+✔ La Winsorización sería una buena alternativa para acotar las edades extremas a un valor máximo razonable para reducir su impacto sin eliminar datos.
+✔ Los valores negativos son  deben ser eliminados o convertidos a nulo ya que no son un comportamiento real.
+✔ Los valores positivos extremos se conservan inicialmente ya que representan un comportamiento real del sistema de salud que puede ser un factor importante.
+""")
+
+
+# ======================
+# PRIMERAS AGREGACIONES
+# ======================
+
+print("\n=== AGREGACIONES DESCRIPTIVAS ===")
+
+# --- Edad promedio y mediana por género ---
+### Usamos df.groupby().agg() para calcular ambas métricas a la vez
+edad_por_genero = df.groupby("Gender")["Age_num"].agg(
+    [('Edad Promedio', 'mean'), ('Edad Mediana', 'median')]
+)
+print("\n--- Edad Promedio y Mediana por Género ---")
+print(edad_por_genero.round(2)) # El método .round(2) se usa para limitar los decimales a dos.
+
+
+# --- Tiempo de espera promedio según asistencia ---
+tiempo_espera_por_asistencia = df.groupby("DidAttend")["DiffDays"].mean()
+print("\n--- Tiempo de Espera Promedio (en días) según Asistencia ---")
+print("1: Asistió | 0: No Asistió")
+print(tiempo_espera_por_asistencia.round(2))
+
+
+# --- Edad promedio y máxima. Tiempo de espera promedio ---
+### Agrupados por si asistieron o no 
+agg_multiple = df.groupby("DidAttend").agg(
+    # Aplicar aggregación a Age_num
+    Edad_Promedio=('Age_num', 'mean'),
+    Edad_Maxima=('Age_num', 'max'),
+    # Aplicar aggregación a DiffDays
+    Espera_Mediana=('DiffDays', 'median'),
+    Conteo=('AppointmentID', 'count')
+)
+print("\n--- Agregaciones Múltiples por Asistencia (DidAttend) ---")
+print("1: Asistió | 0: No Asistió")
+print(agg_multiple.round(2))
