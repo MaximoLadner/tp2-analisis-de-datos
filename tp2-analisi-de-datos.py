@@ -12,6 +12,7 @@ import numpy as np
 CSV = "DatasetClase3_corrupto.csv"
 df = pd.read_csv(CSV)
 
+
 # Mostrar dimensiones del DataFrame
 print("\n=== SHAPE ===")
 print(df.shape)
@@ -34,16 +35,12 @@ print(df.dtypes)
 # 2️⃣ VALORES NULOS
 # ======================
 
-# Cargar dataset
-CSV = "DatasetClase3_corrupto.csv"
-df = pd.read_csv(CSV)
-
 # --- Contar nulos por columna ---
 print("\n=== NULOS POR COLUMNA ===")
 print(df.isna().sum())
 
 # --- Detectar y reemplazar tokens que representan nulos ---
-TOKENS_NULOS = {"", " ", "-", "NA", "NaN", "N/A", "Desconocido", "desconocido"}
+TOKENS_NULOS = {"", " ", "   ", "-", "na", "NA", "NaN", "nan", "N/A", "Desconocido", "desconocido"} 
 for c in df.columns:
     if df[c].dtype == object:
         df[c] = df[c].replace(list(TOKENS_NULOS), pd.NA)
@@ -88,10 +85,6 @@ print(df["Age_grupo"].describe()[["mean", "50%", "std"]])
 # 3️⃣ DUPLICADOS
 # ======================
 
-# Cargar dataset
-CSV = "DatasetClase3_corrupto.csv"
-df = pd.read_csv(CSV)
-
 # --- Detectar duplicados exactos ---
 duplicados_exactos = df.duplicated().sum()
 print(f"\n=== DUPLICADOS EXACTOS ===\nCantidad: {duplicados_exactos}")
@@ -120,4 +113,93 @@ Se eliminaron los duplicados exactos para evitar registros repetidos
 que podrían distorsionar los análisis estadísticos. 
 Los duplicados por ID no se eliminaron todavía, ya que podrían 
 representar citas distintas del mismo paciente.
+""")
+
+# ======================
+# 4️⃣ FECHAS
+# ======================
+
+
+# --- Convertir columnas de fecha ---
+# Convertimos las columnas 'ScheduledDay' y 'AppointmentDay' al tipo datetime
+df["ScheduledDay"] = pd.to_datetime(df["ScheduledDay"], errors="coerce")
+df["AppointmentDay"] = pd.to_datetime(df["AppointmentDay"], errors="coerce")
+
+# --- Crear columna DiffDays ---
+# Calcula la diferencia en días entre la cita y el agendamiento
+df["DiffDays"] = (df["AppointmentDay"] - df["ScheduledDay"]).dt.days
+
+# --- Detectar casos con valores negativos ---
+negativos = df[df["DiffDays"] < 0]
+
+print("\n=== DIFERENCIAS DE FECHAS ===")
+print(f"Cantidad de valores negativos: {len(negativos)}")
+
+if len(negativos) > 0:
+    print("\nEjemplos de registros con DiffDays negativo:")
+    print(negativos[["ScheduledDay", "AppointmentDay", "DiffDays"]].head())
+
+# --- Revisión general ---
+print("\nResumen de DiffDays:")
+print(df["DiffDays"].describe())
+
+# --- Documentar la decisión ---
+print("""
+DECISIÓN:
+Se crearon las columnas de tipo fecha correctamente y la diferencia en días (DiffDays).
+Los valores negativos indican errores en la carga de datos (fechas de cita anteriores a la programación).
+Estos registros se marcarán para revisión o eliminación en pasos posteriores.
+""")            
+
+
+# ======================
+# 5️⃣ CATEGÓRICAS
+# ======================
+
+
+# --- Identificar columnas con baja cardinalidad ---
+low_cardinality = [col for col in df.columns if df[col].nunique() <= 10]
+print("\n=== COLUMNAS CON BAJA CARDINALIDAD ===")
+print(low_cardinality)
+
+# --- Convertir esas columnas a tipo category ---
+for col in low_cardinality:
+    df[col] = df[col].astype("category")
+
+print("\nTipos de datos luego de conversión:")
+print(df.dtypes[df.dtypes == "category"])
+
+# --- Unificar valores mal escritos en columnas categóricas ---
+if "Gender" in df.columns:
+    df["Gender"] = df["Gender"].replace({
+        "FEM": "F",
+        "Fem": "F",
+        "female": "F",
+        "MASC": "M",
+        "Masc": "M",
+        "male": "M"
+    })
+
+# --- Crear variable booleana DidAttend ---
+# Según la consigna, 1 = asistió, 0 = no asistió
+if "No-show" in df.columns:
+    df["DidAttend"] = df["No-show"].apply(lambda x: 0 if str(x).strip().upper() == "YES" else 1)
+
+print("\n=== COLUMNA DidAttend ===")
+print(df["DidAttend"].value_counts())
+
+# --- Mostrar valores únicos actualizados ---
+if "Gender" in df.columns:
+    print("\nValores únicos en Gender luego de limpieza:")
+    print(df["Gender"].unique())
+
+# --- Guardar dataset actualizado (opcional) ---
+# df.to_csv("DatasetClase3_limpio.csv", index=False)
+
+print("""
+DECISIÓN:
+✔ Se detectaron columnas categóricas con baja cardinalidad.
+✔ Se convirtieron al tipo category.
+✔ Se normalizaron valores inconsistentes (por ej. 'Fem' → 'F').
+✔ Se creó la variable DidAttend, que representa si el paciente asistió (1) o no (0).
 """)
