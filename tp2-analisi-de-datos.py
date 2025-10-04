@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 # ======================
-# 1️⃣ CARGA Y EXPLORACIÓN INICIAL
+# CARGA Y EXPLORACIÓN INICIAL
 # ======================
 
 # Cargar el dataset
@@ -32,7 +32,7 @@ print(df.dtypes)
 
 
 # ======================
-# 2️⃣ VALORES NULOS
+# VALORES NULOS
 # ======================
 
 # --- Contar nulos por columna ---
@@ -56,11 +56,11 @@ df["Age_num"] = pd.to_numeric(df["Age"], errors="coerce")
 print("\n=== ESTADÍSTICOS ANTES DE IMPUTAR (Age) ===")
 print(df["Age_num"].describe()[["mean", "50%", "std"]])
 
-# 🔹 Imputación 1: con la mediana general
+# Imputación 1: con la mediana general
 mediana = df["Age_num"].median()
 df["Age_mediana"] = df["Age_num"].fillna(mediana)
 
-# 🔹 Imputación 2: por grupo (ej. por género)
+# Imputación 2: por grupo (ej. por género)
 # Convertimos Gender a texto limpio antes de agrupar
 df["Gender"] = df["Gender"].astype("string").str.strip().str.lower()
 df["Gender"] = df["Gender"].replace({
@@ -82,7 +82,7 @@ print(df["Age_grupo"].describe()[["mean", "50%", "std"]])
 
 
 # ======================
-# 3️⃣ DUPLICADOS
+# DUPLICADOS
 # ======================
 
 # --- Detectar duplicados exactos ---
@@ -116,7 +116,7 @@ representar citas distintas del mismo paciente.
 """)
 
 # ======================
-# 4️⃣ FECHAS
+# FECHAS
 # ======================
 
 
@@ -153,7 +153,7 @@ Estos registros se marcarán para revisión o eliminación en pasos posteriores.
 
 
 # ======================
-# 5️⃣ CATEGÓRICAS
+# CATEGÓRICAS
 # ======================
 
 
